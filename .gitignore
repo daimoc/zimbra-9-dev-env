@@ -1,0 +1,25 @@
+# Zimbra data (large, machine-local)
+zimbra-storage/
+
+# Generated certs + rendered config (derived from templates + .env)
+idp/certs/
+idp/config/
+idp/.ssp_secret
+sp/certs/
+sp/config/
+sp/.ssp_secret
+sp/.preauth_key
+__pycache__/
+
+# Built zimlets (keep sources, ignore artifacts)
+zimlets/*.zip
+
+# Scratch
+*.log
+.pytest_cache/
+
+# Environment variables (local overrides)
+.env
+
+# Local AI-assistant working files
+.superpowers/

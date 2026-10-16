@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example zimlet for the Zimbra 9 SAML testbed.
+  - Shows a panel item "Testbed".
+  - When an email contains the string TESTBED-OK, a content balloon
+    proves the zimlet is live in the Web UI.
+  Build: make build-example-zimlet
+-->
+<zimlet name="com_zimbra_testbed_hello"
+        version="1.0"
+        label="${msg.label}"
+        description="${msg.description}">
+    <include>testbed_hello.js</include>
+    <handlerObject>com_zimbra_testbed_hello_HandlerObject</handlerObject>
+
+    <contentObject type="testbed">
+        <matchOn>
+            <regex attrs="ig">TESTBED-OK</regex>
+        </matchOn>
+        <toolTip>
+            Testbed zimlet is alive!
+        </toolTip>
+    </contentObject>
+
+    <zimletPanelItem label="${msg.panel_label}" icon="Testbed-panelIcon">
+        <toolTipText>${msg.panel_tooltip}</toolTipText>
+    </zimletPanelItem>
+</zimlet>

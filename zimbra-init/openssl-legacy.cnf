@@ -1,0 +1,24 @@
+# OpenSSL config for the Zimbra testbed.
+#
+# The Zimbra 9 image bundles OpenSSL 3.0.9 at /opt/zimbra/common/bin/openssl
+# (found first on the zimbra user's PATH). Zimbra 9's keystore creation uses
+# the legacy PKCS12 MAC (PKCS12KDF), which OpenSSL 3.x only exposes through the
+# "legacy" provider — not active by default. Enabling it here makes
+# `openssl pkcs12 -export` work again.
+#
+# The system OpenSSL 1.1.1 ignores the "providers" section (no-op), so pointing
+# OPENSSL_CONF here is safe for both.
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+default = default_sect
+legacy  = legacy_sect
+
+[default_sect]
+activate = 1
+
+[legacy_sect]
+activate = 1

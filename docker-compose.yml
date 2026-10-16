@@ -1,0 +1,127 @@
+# Zimbra 9 Zimlet Testbed — compose stack
+# Bring up: make up   (or: ./idp/render-config.sh && docker compose up -d)
+name: zimbra-testbed
+
+services:
+  dns:
+    image: 4km3/dnsmasq
+    container_name: zt-dns
+    restart: unless-stopped
+    command:
+      - "--address=/${ZIMBRA_HOST}/${ZIMBRA_IP}"
+      - "--address=/${IDP_HOST}/${IDP_IP}"
+    cap_add:
+      - NET_ADMIN
+    networks:
+      zt-net:
+        ipv4_address: ${DNS_IP}
+
+  zimbra:
+    image: ${ZIMBRA_IMAGE}
+    container_name: zt-zimbra
+    restart: unless-stopped
+    hostname: ${ZIMBRA_HOST}
+    ports:
+      - "${ZIMBRA_HTTP_PORT}:80"
+      - "${IMAPS_PORT}:993"
+      - "${POP3S_PORT}:995"
+    dns:
+      - ${DNS_IP}
+    environment:
+      - PASSWORD=${ZIMBRA_ADMIN_PASSWORD}
+    # Wrapper around the image CMD (/opt/build.sh -d): enables the OpenSSL
+    # "legacy" provider in Zimbra's bundled OpenSSL 3.0.9 so the installer's
+    # keystore (PKCS12) step succeeds. See zimbra-init/entrypoint.sh.
+    command: ["/opt/zt-init/entrypoint.sh"]
+    # NOTE: no nested mounts INSIDE /opt/zimbra — the image's one-shot install
+    # runs `rm -rf /opt/zimbra` at first boot and nested mounts break it.
+    # Support dirs are mounted as siblings of /opt/zimbra instead.
+    volumes:
+      - ./zimbra-storage:/opt/zimbra:rw
+      - ./zimbra-init:/opt/zt-init:ro
+      - ./zimlets:/opt/zt-zimlets:ro
+      # Config for init.sh (sp/.preauth_key is created by `make config`).
+      - ./.env:/opt/zt-env/.env:ro
+      - ./sp/.preauth_key:/opt/zt-env/preauth_key:ro
+    networks:
+      zt-net:
+        ipv4_address: ${ZIMBRA_IP}
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 6G
+    healthcheck:
+      test: ["CMD-SHELL", "su - zimbra -c '/opt/zimbra/bin/zmcontrol status' || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 30
+      start_period: 300s
+
+  idp:
+    build:
+      context: ./idp
+      dockerfile: Dockerfile
+    image: zimbra-testbed-ssp:2.4.9.3
+    container_name: zt-idp
+    restart: unless-stopped
+    hostname: ${IDP_HOST}
+    ports:
+      - "${IDP_HTTPS_PORT}:8443"
+    dns:
+      - ${DNS_IP}
+    volumes:
+      - ./idp/config:/idpconfig:ro
+      - ./idp/certs:/idpcerts:ro
+    networks:
+      zt-net:
+        ipv4_address: ${IDP_IP}
+    depends_on:
+      - dns
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk https://${IDP_HOST}:8443/simplesaml/saml2/idp/metadata.php | grep -q EntityDescriptor || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  # SAML SP proxy in front of the webmail: owns the public
+  # https://zimbra.lan:${ZIMBRA_HTTPS_PORT}. Authenticates users against the
+  # IdP, logs them into Zimbra via domain preauth, proxies everything else to
+  # Zimbra's nginx (zimbra.lan:443 on zt-net). Same image as the IdP.
+  sp:
+    build:
+      context: ./idp
+      dockerfile: Dockerfile
+    image: zimbra-testbed-ssp:2.4.9.3
+    container_name: zt-sp
+    restart: unless-stopped
+    entrypoint: ["/sp/entrypoint.sh"]
+    ports:
+      - "${ZIMBRA_HTTPS_PORT}:8443"
+    dns:
+      - ${DNS_IP}
+    volumes:
+      - ./sp:/sp:ro
+      - ./idp/certs:/idpcerts:ro
+    networks:
+      zt-net:
+        ipv4_address: ${SP_IP}
+    depends_on:
+      - dns
+      - idp
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk https://localhost:8443/simplesaml/module.php/saml/sp/metadata.php/default-sp | grep -q EntityDescriptor || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+
+networks:
+  zt-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${SUBNET}
